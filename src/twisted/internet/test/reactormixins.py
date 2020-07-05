@@ -317,6 +317,7 @@ class ReactorBuilder:
             timeout = self.getTimeout()
 
         timedOut = []
+
         def stop():
             timedOut.append(None)
             reactor.stop()

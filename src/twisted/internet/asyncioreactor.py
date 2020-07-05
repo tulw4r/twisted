@@ -9,6 +9,8 @@ asyncio-based reactor implementation.
 
 import errno
 
+from typing import Dict, Optional, Type
+
 from zope.interface import implementer
 
 from twisted.logger import Logger
@@ -16,16 +18,10 @@ from twisted.internet.posixbase import (PosixReactorBase, _NO_FILEDESC,
                                         _ContinuousPolling)
 from twisted.python.log import callWithLogger
 from twisted.python.runtime import seconds as runtimeSeconds
+from twisted.internet.abstract import FileDescriptor
 from twisted.internet.interfaces import IReactorFDSet
 
-try:
-    from asyncio import get_event_loop
-except ImportError:
-    raise ImportError("Requires asyncio.")
-
-# As per ImportError above, this module is never imported on python 2, but
-# pyflakes still runs on python 2, so let's tell it where the errors come from.
-from builtins import PermissionError, BrokenPipeError
+from asyncio import get_event_loop, AbstractEventLoop, SelectorEventLoop
 
 
 
@@ -33,18 +29,41 @@ from builtins import PermissionError, BrokenPipeError
 class AsyncioSelectorReactor(PosixReactorBase):
     """
     Reactor running on top of L{asyncio.SelectorEventLoop}.
+
+    On POSIX platforms, the default event loop is
+    L{asyncio.SelectorEventLoop}.
+    On Windows, the default event loop on Python 3.7 and older
+    is L{asyncio.WindowsSelectorEventLoop}, but on Python 3.8 and newer
+    the default event loop is L{asyncio.WindowsProactorEventLoop} which
+    is incompatible with L{AsyncioSelectorReactor}.
+    Applications that use L{AsyncioSelectorReactor} on Windows
+    with Python 3.8+ must call
+    C{asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())}
+    before instantiating and running L{AsyncioSelectorReactor}.
     """
     _asyncClosed = False
     _log = Logger()
 
-    def __init__(self, eventloop=None):
-
+    def __init__(self, eventloop: Optional[SelectorEventLoop] = None):
         if eventloop is None:
-            eventloop = get_event_loop()
+            _eventloop = get_event_loop()  # type: AbstractEventLoop
+            # On Python 3.8+, asyncio.get_event_loop() on
+            # Windows was changed to return a ProactorEventLoop
+            if not isinstance(_eventloop, SelectorEventLoop):
+                raise ValueError(
+                    "get_event_loop() returns: {} which is not a "
+                    "SelectorEventLoop".format(_eventloop))
+
+            eventloop = _eventloop
+        else:
+            if not isinstance(eventloop, SelectorEventLoop):
+                raise ValueError(
+                    "eventloop is: {} which is not a subclass of "
+                    "SelectorEventLoop".format(eventloop))
 
         self._asyncioEventloop = eventloop
-        self._writers = {}
-        self._readers = {}
+        self._writers = {}  # type: Dict[Type[FileDescriptor], int]
+        self._readers = {}  # type: Dict[Type[FileDescriptor], int]
         self._continuousPolling = _ContinuousPolling(self)
 
         self._scheduledAt = None

@@ -8,6 +8,7 @@ Tests for L{twisted.conch.client.knownhosts}.
 
 import os
 from binascii import Error as BinasciiError, b2a_base64, a2b_base64
+from unittest import skipIf
 
 from zope.interface.verify import verifyObject
 
@@ -74,6 +75,7 @@ sampleHostIPLine = (
 sampleHashedLine = (
     b"|1|gJbSEPBG9ZSBoZpHNtZBD1bHKBA=|bQv+0Xa0dByrwkA1EB0E7Xop/Fo= ssh-rsa " +
     sampleEncodedKey + b"\n")
+
 
 
 class EntryTestsMixin:
@@ -1186,6 +1188,8 @@ class FakeObject(object):
     """
 
 
+
+@skipIf(not FilePath("/dev/tty").exists(), "Platform lacks /dev/tty")
 class DefaultAPITests(TestCase):
     """
     The API in L{twisted.conch.client.default.verifyHostKey} is the integration
